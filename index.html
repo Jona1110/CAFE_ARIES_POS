@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Aries Café | Punto de Venta y Caja</title>
+  <link rel="icon" type="image/jpeg" href="img/logo.jpeg">
+  <link rel="stylesheet" href="pos.css">
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- BARRA SUPERIOR DEL POS -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-logo-wrap">
+        <img src="img/logo.jpeg" alt="Logo Aries Café" class="brand-logo"
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div class="brand-icon" style="display:none;"><i class="ri-cup-fill"></i></div>
+      </div>
+      <div class="brand-text">
+        <div class="brand-title-row">
+          <h1>Aries Café</h1>
+          <span class="brand-badge">POS</span>
+        </div>
+        <span class="subtitle">Punto de Venta & Control de Caja</span>
+      </div>
+    </div>
+
+    <!-- NAVEGACIÓN DE SUB-PANELES INTEGRADOS -->
+    <nav class="subpanel-nav" aria-label="Navegación principal">
+      <button class="subnav-btn active" data-target="vista-pos" onclick="cambiarSubPanel('vista-pos', this)">
+        <i class="ri-store-2-line"></i> <span>Punto de Venta</span>
+      </button>
+      <button class="subnav-btn" data-target="vista-gastos" onclick="cambiarSubPanel('vista-gastos', this)">
+        <i class="ri-exchange-dollar-line"></i> <span>Gastos y Entradas</span>
+      </button>
+      <button class="subnav-btn" data-target="vista-resumen" onclick="cambiarSubPanel('vista-resumen', this)">
+        <i class="ri-bar-chart-box-line"></i> <span>Resumen de Ventas</span>
+      </button>
+    </nav>
+
+    <div class="topbar-actions">
+      <button class="btn-sync-manual" onclick="cargarDatosPOS()" title="Sincronizar con base de datos">
+        <i class="ri-refresh-line"></i> <span>Sincronizar</span>
+      </button>
+
+      <!-- Acceso directo al Panel Independiente de Inventario -->
+      <a href="https://cafeariesinventario.netlify.app/" class="nav-link-panel">
+        <i class="ri-archive-drawer-line"></i> <span>Inventario y Recetas</span>
+        <span id="badge-alertas" class="badge-alert hidden">0</span>
+      </a>
+
+      <div class="status-sync" id="sync-status">
+        <span class="dot online"></span> <span id="sync-text">Conectado</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- BANNER DE ALERTA DE INSUMOS BAJOS -->
+  <div id="alerta-banner" class="alerta-banner hidden">
+    <div class="alerta-content">
+      <i class="ri-alarm-warning-fill"></i>
+      <span id="alerta-mensaje">Atención: Hay insumos por terminarse.</span>
+    </div>
+    <a href="https://cafeariesinventario.netlify.app/" class="btn-alerta-ver">Ir al Almacén</a>
+  </div>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="panel">
+    
+    <!-- BARRA DE RESUMEN ECONÓMICO DEL DÍA (SIEMPRE VISIBLE) -->
+    <section class="daily-finance-bar">
+      <div class="finance-pill">
+        <span class="fp-label"><i class="ri-arrow-up-circle-fill text-success"></i> Ventas Hoy</span>
+        <strong id="kpi-ventas-hoy">$0.00</strong>
+      </div>
+      <div class="finance-pill">
+        <span class="fp-label"><i class="ri-add-circle-fill text-info"></i> Entradas Extra Hoy</span>
+        <strong id="kpi-entradas-hoy">$0.00</strong>
+      </div>
+      <div class="finance-pill">
+        <span class="fp-label"><i class="ri-arrow-down-circle-fill text-danger"></i> Gastos / Salidas Hoy</span>
+        <strong id="kpi-gastos-hoy">$0.00</strong>
+      </div>
+      <div class="finance-pill highlight">
+        <span class="fp-label"><i class="ri-wallet-3-fill"></i> Balance Neto Hoy</span>
+        <strong id="kpi-balance-hoy">$0.00</strong>
+      </div>
+    </section>
+
+    <!-- =========================================================
+         SUB-PANEL 1: PUNTO DE VENTA (CATÁLOGO + TICKET)
+    ========================================================== -->
+    <section id="vista-pos" class="subpanel active">
+      <div class="pos-layout">
+        
+        <!-- CATÁLOGO DE PRODUCTOS (BEBIDAS + POSTRES) -->
+        <div class="pos-catalog">
+          <div class="catalog-header">
+            <div class="search-box">
+              <i class="ri-search-line"></i>
+              <input type="text" id="buscar-producto" placeholder="Buscar bebida o postre (ej. Latte, Cheesecake, Frappé)...">
+            </div>
+            
+            <div class="category-filters" id="filtros-categoria">
+              <button class="cat-btn active" data-cat="Todas">Todas</button>
+              <button class="cat-btn" data-cat="Calientes"><i class="ri-cup-line"></i> Calientes</button>
+              <button class="cat-btn" data-cat="Frías"><i class="ri-snowy-line"></i> Frías</button>
+              <button class="cat-btn" data-cat="Especialidades"><i class="ri-sparkling-line"></i> Especialidades</button>
+              <button class="cat-btn" data-cat="Postres"><i class="ri-cake-3-line"></i> Postres</button>
+            </div>
+          </div>
+
+          <div id="grid-productos" class="products-grid">
+            <!-- Renderizado dinámico desde Google Sheets / Caché -->
+          </div>
+        </div>
+
+        <!-- TICKET DE COBRO -->
+        <aside class="pos-ticket" id="panel-orden-actual">
+          <div class="ticket-header">
+            <h2><i class="ri-bill-line"></i> Orden Actual</h2>
+            <button id="btn-limpiar-ticket" class="btn-icon-danger" title="Vaciar orden">
+              <i class="ri-delete-bin-line"></i>
+            </button>
+          </div>
+
+          <div id="ticket-items" class="ticket-items">
+            <div class="empty-ticket">
+              <i class="ri-cup-line"></i>
+              <p>Selecciona bebidas o postres del menú para iniciar la venta</p>
+            </div>
+          </div>
+
+          <div class="ticket-footer">
+            <div class="payment-method">
+              <label>Método de Pago:</label>
+              <div class="method-options">
+                <button class="pay-btn active" data-method="Efectivo"><i class="ri-money-dollar-circle-line"></i> Efectivo</button>
+                <button class="pay-btn" data-method="Tarjeta"><i class="ri-bank-card-line"></i> Tarjeta</button>
+                <button class="pay-btn" data-method="Transferencia"><i class="ri-smartphone-line"></i> Transf.</button>
+              </div>
+            </div>
+
+            <!-- CALCULADORA DE CAMBIO (SOLO EFECTIVO) -->
+            <div id="caja-efectivo" class="cash-calculator">
+              <div class="cash-row">
+                <label for="monto-recibido">Recibido ($):</label>
+                <input type="number" id="monto-recibido" min="0" step="0.50" inputmode="decimal" placeholder="0.00">
+              </div>
+              <div class="cash-row">
+                <span>Cambio a entregar:</span>
+                <strong id="monto-cambio" class="cambio-valor">$0.00</strong>
+              </div>
+            </div>
+
+            <div class="ticket-totals">
+              <div class="total-row">
+                <span>Artículos en orden:</span>
+                <span id="ticket-cantidad">0</span>
+              </div>
+              <div class="total-row grand-total">
+                <span>Total a Cobrar:</span>
+                <span id="ticket-total">$0.00</span>
+              </div>
+            </div>
+
+            <button id="btn-completar-venta" class="btn-primary btn-checkout" disabled>
+              <i class="ri-check-double-line"></i> Completar Venta
+            </button>
+          </div>
+        </aside>
+
+      </div>
+    </section>
+
+    <!-- =========================================================
+         SUB-PANEL 2: REGISTRAR GASTOS Y ENTRADAS DE CAJA
+    ========================================================== -->
+    <section id="vista-gastos" class="subpanel">
+      <div class="embedded-grid-2">
+        
+        <!-- COLUMNA IZQUIERDA: FORMULARIO INTEGRADO -->
+        <div class="card-panel">
+          <div class="card-panel-header">
+            <h2><i class="ri-exchange-dollar-line"></i> Registrar Movimiento de Caja</h2>
+            <p>Registra salidas de efectivo por compras/servicios o entradas extra.</p>
+          </div>
+
+          <form id="form-movimiento">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Tipo de Movimiento</label>
+                <select id="mov-tipo" required>
+                  <option value="EGRESO">Gasto / Salida de Dinero (-)</option>
+                  <option value="INGRESO">Entrada de Dinero Extra (+)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Categoría</label>
+                <select id="mov-categoria" required>
+                  <option value="Compra Insumos">Compra de Insumos</option>
+                  <option value="Servicios">Servicios (Luz/Agua/Gas/Internet)</option>
+                  <option value="Nómina">Nómina / Sueldos</option>
+                  <option value="Mantenimiento">Mantenimiento / Equipo</option>
+                  <option value="Fondo Caja">Fondo Inicial / Cambio</option>
+                  <option value="Otros">Otros Gastos / Entradas</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Concepto o Descripción</label>
+              <input type="text" id="mov-concepto" required placeholder="Ej. Compra de 3 bolsas de hielo, Pago de garrafones...">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Monto ($ MXN)</label>
+                <input type="number" id="mov-monto" step="0.50" min="1" inputmode="decimal" required placeholder="0.00">
+              </div>
+              <div class="form-group">
+                <label>Método / Caja</label>
+                <select id="mov-metodo" required>
+                  <option value="Efectivo">Efectivo en Caja</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Tarjeta">Tarjeta</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary btn-full">
+              <i class="ri-save-line"></i> Guardar Movimiento en base de datos
+            </button>
+          </form>
+        </div>
+
+        <!-- COLUMNA DERECHA: LISTADO EN VIVO DE MOVIMIENTOS -->
+        <div class="card-panel">
+          <div class="card-panel-header flex-between">
+            <div>
+              <h2><i class="ri-file-list-3-line"></i> Bitácora de Gastos y Entradas</h2>
+              <p>Historial sincronizado con la pestaña <strong>Movimientos</strong>.</p>
+            </div>
+          </div>
+
+          <div class="table-responsive" style="max-height: 460px;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Tipo</th>
+                  <th>Categoría</th>
+                  <th>Concepto</th>
+                  <th>Método</th>
+                  <th>Monto</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-movimientos-panel"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- =========================================================
+         SUB-PANEL 3: RESUMEN SEMANAL E HISTORIAL DE VENTAS
+    ========================================================== -->
+    <section id="vista-resumen" class="subpanel">
+      <div class="card-panel">
+        <div class="card-panel-header flex-between">
+          <div>
+            <h2><i class="ri-bar-chart-box-line"></i> Resumen Semanal e Historial de Ventas</h2>
+            <p>Balance financiero de los últimos 7 días y detalle de tickets cobrados.</p>
+          </div>
+        </div>
+
+        <!-- TARJETAS RESUMEN SEMANAL (ÚLTIMOS 7 DÍAS) -->
+        <div class="weekly-summary-grid">
+          <div class="summary-card">
+            <span>Ventas Últimos 7 Días</span>
+            <strong id="sem-ventas" class="text-success">$0.00</strong>
+            <small id="sem-tickets">0 tickets cobrados</small>
+          </div>
+          <div class="summary-card">
+            <span>Entradas Extra (7 Días)</span>
+            <strong id="sem-entradas" class="text-info">$0.00</strong>
+            <small>Aportaciones / Fondo</small>
+          </div>
+          <div class="summary-card">
+            <span>Gastos / Salidas (7 Días)</span>
+            <strong id="sem-gastos" class="text-danger">$0.00</strong>
+            <small>Compras y operación</small>
+          </div>
+          <div class="summary-card total-card">
+            <span>Utilidad Neta Semanal</span>
+            <strong id="sem-utilidad">$0.00</strong>
+            <small>Ingresos - Gastos</small>
+          </div>
+        </div>
+
+        <!-- FILTRO RÁPIDO DE VENTAS -->
+        <div class="table-toolbar">
+          <h3><i class="ri-receipt-line"></i> Detalle de Ventas Registradas</h3>
+          <div class="search-box toolbar-search">
+            <i class="ri-search-line"></i>
+            <input type="text" id="buscar-venta" placeholder="Buscar por folio, producto o pago...">
+          </div>
+        </div>
+
+        <div class="table-responsive" style="max-height: 450px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Folio / Fecha</th>
+                <th>Productos Vendidos</th>
+                <th>Método</th>
+                <th>Pagó Con</th>
+                <th>Cambio</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-historial-ventas"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- BARRA FLOTANTE INFERIOR PARA CELULARES Y TABLETS -->
+  <div id="mobile-cart-bar" class="mobile-cart-bar hidden" onclick="irAOrdenActual()">
+    <div class="mobile-cart-info">
+      <span class="mobile-cart-badge" id="mobile-cart-count">0</span>
+      <div>
+        <small>Orden Actual</small>
+        <strong id="mobile-cart-total">$0.00</strong>
+      </div>
+    </div>
+    <button type="button" class="mobile-cart-btn">
+      Ver Orden <i class="ri-arrow-down-circle-line"></i>
+    </button>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="pos.js"></script>
+</body>
+</html>
