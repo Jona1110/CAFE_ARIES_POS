@@ -180,7 +180,7 @@ function cambiarSubPanel(idSubPanel, btn) {
 async function cargarDatosPOS(silencioso = false) {
   if (sincronizandoPOS) return;
   sincronizandoPOS = true;
-  setSyncStatus(true, silencioso ? 'Sincronizando...' : 'Consultando Sheets...');
+  setSyncStatus(true, silencioso ? 'Sincronizando...' : 'Consultando...');
 
   try {
     const res = await fetch(`${API_URL}?action=getData&t=${Date.now()}`);
