@@ -703,3 +703,92 @@ function mostrarToast(mensaje, tipo = 'success') {
 
   setTimeout(() => toast.remove(), 3800);
 }
+
+function cambiarSubPanel(idSubPanel, btn) {
+  document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  document.querySelectorAll('.subpanel').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(idSubPanel);
+  if (target) target.classList.add('active');
+
+  // Mostrar barra flotante móvil solo en la pestaña Punto de Venta si hay artículos
+  const mobileBar = document.getElementById('mobile-cart-bar');
+  if (mobileBar) {
+    if (idSubPanel === 'vista-pos' && state.carrito.length > 0) {
+      mobileBar.classList.remove('hidden');
+    } else {
+      mobileBar.classList.add('hidden');
+    }
+  }
+
+  if (idSubPanel === 'vista-gastos') {
+    renderizarTablaMovimientos();
+  } else if (idSubPanel === 'vista-resumen') {
+    renderizarResumenYVentas();
+  }
+}
+
+function renderizarCarrito() {
+  const container = document.getElementById('ticket-items');
+  const btnCheckout = document.getElementById('btn-completar-venta');
+  const mobileBar = document.getElementById('mobile-cart-bar');
+
+  if (state.carrito.length === 0) {
+    container.innerHTML = `
+      <div class="empty-ticket">
+        <i class="ri-cup-line"></i>
+        <p>Selecciona bebidas o postres del menú para iniciar la venta</p>
+      </div>`;
+    document.getElementById('ticket-cantidad').textContent = '0';
+    document.getElementById('ticket-total').textContent = '$0.00';
+    document.getElementById('monto-cambio').textContent = '$0.00';
+    btnCheckout.disabled = true;
+
+    if (mobileBar) mobileBar.classList.add('hidden');
+    return;
+  }
+
+  let totalArticulos = 0;
+  let totalDinero = 0;
+
+  container.innerHTML = state.carrito.map(item => {
+    const subtotal = item.precio * item.cantidad;
+    totalArticulos += item.cantidad;
+    totalDinero += subtotal;
+
+    return `
+      <div class="ticket-item">
+        <div class="item-info">
+          <h4>${item.nombre}</h4>
+          <span>$${item.precio.toFixed(2)} c/u • Subtotal: $${subtotal.toFixed(2)}</span>
+        </div>
+        <div class="item-controls">
+          <button class="qty-btn" onclick="cambiarCantidadCarrito('${item.id}', -1)">-</button>
+          <strong>${item.cantidad}</strong>
+          <button class="qty-btn" onclick="cambiarCantidadCarrito('${item.id}', 1)">+</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('ticket-cantidad').textContent = totalArticulos;
+  document.getElementById('ticket-total').textContent = `$${totalDinero.toFixed(2)}`;
+  btnCheckout.disabled = false;
+  calcularCambio();
+
+  // Actualizar barra flotante en móviles/tablets
+  if (mobileBar) {
+    const vistaPosActiva = document.getElementById('vista-pos')?.classList.contains('active');
+    document.getElementById('mobile-cart-count').textContent = totalArticulos;
+    document.getElementById('mobile-cart-total').textContent = `$${totalDinero.toFixed(2)}`;
+    mobileBar.classList.toggle('hidden', !vistaPosActiva);
+  }
+}
+
+function irAOrdenActual() {
+  const ticketEl = document.getElementById('panel-orden-actual');
+  if (ticketEl) {
+    ticketEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
