@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="pos.css">
   <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Librería para convertir el ticket HTML en imagen PNG -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 </head>
 <body>
 
@@ -321,6 +323,7 @@
                 <th>Pagó Con</th>
                 <th>Cambio</th>
                 <th>Total</th>
+                <th>Ticket</th>
               </tr>
             </thead>
             <tbody id="tabla-historial-ventas"></tbody>
@@ -343,6 +346,91 @@
     <button type="button" class="mobile-cart-btn">
       Ver Orden <i class="ri-arrow-down-circle-line"></i>
     </button>
+  </div>
+
+  <!-- =========================================================
+       MODAL DE TICKET / COMPROBANTE DE VENTA (IMPRIMIBLE Y DIGITAL)
+  ========================================================== -->
+  <div id="modal-ticket" class="ticket-modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="ticket-modal-title">
+    <div class="ticket-modal-card">
+      <div class="ticket-modal-header no-print">
+        <h3 id="ticket-modal-title"><i class="ri-bill-line"></i> Comprobante de Venta</h3>
+        <button type="button" class="btn-close-modal" onclick="cerrarModalTicket()" title="Cerrar">
+          <i class="ri-close-line"></i>
+        </button>
+      </div>
+
+      <!-- ÁREA IMPRIMIBLE Y CAPTURABLE DEL TICKET TÉRMICO -->
+      <div class="ticket-preview-scroll">
+        <div id="ticket-imprimible" class="thermal-ticket">
+          <div class="tt-header">
+            <img src="img/logo.jpeg" alt="Aries Café" class="tt-logo" crossorigin="anonymous" onerror="this.style.display='none'">
+            <h2>ARIES CAFÉ</h2>
+            <p class="tt-social">@aries_cafeteria • @aries.cafeee</p>
+            <p class="tt-subtitle">¡Gracias por tu preferencia!</p>
+          </div>
+
+          <div class="tt-divider">================================</div>
+
+          <div class="tt-meta">
+            <div><span>Folio:</span> <strong id="tt-folio">VTA-000000</strong></div>
+            <div><span>Fecha:</span> <span id="tt-fecha">--/--/---- --:--</span></div>
+            <div><span>Pago:</span> <span id="tt-metodo">Efectivo</span></div>
+          </div>
+
+          <div class="tt-divider">--------------------------------</div>
+
+          <div class="tt-items-header">
+            <span>CANT / PRODUCTO</span>
+            <span>IMPORTE</span>
+          </div>
+          <div id="tt-items-list" class="tt-items-list">
+            <!-- Renderizado dinámico -->
+          </div>
+
+          <div class="tt-divider">--------------------------------</div>
+
+          <div class="tt-totals">
+            <div class="tt-row">
+              <span>Artículos:</span>
+              <span id="tt-articulos">0</span>
+            </div>
+            <div class="tt-row tt-grand">
+              <span>TOTAL:</span>
+              <span id="tt-total">$0.00</span>
+            </div>
+            <div class="tt-row" id="tt-row-recibido">
+              <span>Recibido:</span>
+              <span id="tt-recibido">$0.00</span>
+            </div>
+            <div class="tt-row" id="tt-row-cambio">
+              <span>Cambio:</span>
+              <span id="tt-cambio">$0.00</span>
+            </div>
+          </div>
+
+          <div class="tt-divider">================================</div>
+
+          <div class="tt-footer">
+            <p>Conserve este comprobante</p>
+            <p>Sistema POS • DIGITALITY</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCIONES DEL TICKET (NO SE IMPRIMEN) -->
+      <div class="ticket-modal-actions no-print">
+        <button type="button" class="btn-ticket-action btn-whatsapp" id="btn-share-img" onclick="compartirImagenTicket(this)">
+          <i class="ri-image-line"></i> Enviar Imagen
+        </button>
+        <button type="button" class="btn-ticket-action btn-share" onclick="descargarImagenTicket()">
+          <i class="ri-download-2-line"></i> Guardar PNG
+        </button>
+        <button type="button" class="btn-ticket-action btn-print" onclick="imprimirTicketTermico()">
+          <i class="ri-printer-line"></i> Imprimir Ticket
+        </button>
+      </div>
+    </div>
   </div>
 
   <div id="toast-container" class="toast-container"></div>
