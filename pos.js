@@ -21,6 +21,12 @@ let state = {
 
 let timerAutoRefreshPOS = null;
 let sincronizandoPOS = false;
+let ventaActualTicket = null;
+let ticketImagenCache = {
+  id: null,
+  blob: null,
+  file: null
+};
 
 // =========================================================
 // PRECARGA INMEDIATA ANTES DEL RENDERIZADO (0ms DE ESPERA)
@@ -367,7 +373,7 @@ function renderizarResumenYVentas() {
   });
 
   if (filtradas.length === 0) {
-    tbodyVentas.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Aún no hay ventas registradas que coincidan.</td></tr>`;
+    tbodyVentas.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:1.5rem;">Aún no hay ventas registradas que coincidan.</td></tr>`;
     return;
   }
 
@@ -381,6 +387,11 @@ function renderizarResumenYVentas() {
         <td>$${(parseFloat(v.pagoCon) || parseFloat(v.total)).toFixed(2)}</td>
         <td>$${(parseFloat(v.cambio) || 0).toFixed(2)}</td>
         <td><strong class="text-success">$${parseFloat(v.total).toFixed(2)}</strong></td>
+        <td>
+          <button type="button" class="btn-reimprimir" onclick="abrirModalTicketPorId('${v.id}')" title="Ver, enviar o imprimir ticket">
+            <i class="ri-bill-line"></i> Ticket
+          </button>
+        </td>
       </tr>
     `;
   }).join('');
@@ -679,9 +690,188 @@ async function procesarVenta() {
   guardarEnLocal();
   actualizarVistaPOS();
 
+  // Mostrar ticket automáticamente para enviar o imprimir
+  abrirModalTicket(ventaPayload);
+
   mostrarToast(`Venta cobrada ($${totalVenta.toFixed(2)}) y enviada a Sheets`, 'success');
 
   await enviarASheets('registrarVenta', ventaPayload);
+}
+
+// =========================================================
+// GESTIÓN DE TICKET DIGITAL (CAPTURA PNG) E IMPRESIÓN TÉRMICA
+// =========================================================
+function abrirModalTicketPorId(idVenta) {
+  const venta = state.ventas.find(v => String(v.id) === String(idVenta));
+  if (venta) {
+    abrirModalTicket(venta);
+  }
+}
+
+function abrirModalTicket(venta) {
+  ventaActualTicket = venta;
+  ticketImagenCache = { id: null, blob: null, file: null };
+
+  const modal = document.getElementById('modal-ticket');
+  if (!modal) return;
+
+  document.getElementById('tt-folio').textContent = venta.id;
+  document.getElementById('tt-fecha').textContent = venta.fecha;
+  document.getElementById('tt-metodo').textContent = venta.metodoPago;
+
+  let totalArticulos = 0;
+  const itemsHTML = (venta.items || []).map(item => {
+    const subtotal = (parseFloat(item.precio) || 0) * (parseInt(item.cantidad) || 1);
+    totalArticulos += parseInt(item.cantidad) || 1;
+    return `
+      <div class="tt-item-row">
+        <span class="tt-item-name">${item.cantidad}x ${item.nombre}</span>
+        <span class="tt-item-price">$${subtotal.toFixed(2)}</span>
+      </div>
+    `;
+  }).join('');
+
+  document.getElementById('tt-items-list').innerHTML = itemsHTML;
+  document.getElementById('tt-articulos').textContent = totalArticulos;
+  document.getElementById('tt-total').textContent = `$${parseFloat(venta.total).toFixed(2)}`;
+
+  const esEfectivo = venta.metodoPago === 'Efectivo';
+  document.getElementById('tt-row-recibido').classList.toggle('hidden', !esEfectivo);
+  document.getElementById('tt-row-cambio').classList.toggle('hidden', !esEfectivo);
+
+  if (esEfectivo) {
+    document.getElementById('tt-recibido').textContent = `$${parseFloat(venta.pagoCon || venta.total).toFixed(2)}`;
+    document.getElementById('tt-cambio').textContent = `$${parseFloat(venta.cambio || 0).toFixed(2)}`;
+  }
+
+  modal.classList.remove('hidden');
+
+  // Pre-generar la captura PNG en segundo plano para que navigator.share no pierda el gesto del usuario en iOS
+  setTimeout(() => {
+    prepararCapturaTicketEnCache(venta.id);
+  }, 120);
+}
+
+function cerrarModalTicket() {
+  const modal = document.getElementById('modal-ticket');
+  if (modal) modal.classList.add('hidden');
+}
+
+async function prepararCapturaTicketEnCache(ventaId) {
+  try {
+    const blob = await generarBlobImagenTicket();
+    const nombreArchivo = `Ticket_${ventaId}.png`;
+    const file = new File([blob], nombreArchivo, { type: 'image/png' });
+    ticketImagenCache = { id: ventaId, blob, file };
+  } catch (e) {
+    console.warn('Pre-captura en segundo plano pospuesta:', e);
+  }
+}
+
+async function generarBlobImagenTicket() {
+  const elementoTicket = document.getElementById('ticket-imprimible');
+  if (!elementoTicket || typeof html2canvas === 'undefined') {
+    throw new Error('No se pudo inicializar el generador de captura.');
+  }
+
+  const canvas = await html2canvas(elementoTicket, {
+    scale: 3,
+    backgroundColor: '#FFFFFF',
+    useCORS: true,
+    allowTaint: true,
+    logging: false
+  });
+
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error('Error al generar la imagen PNG del ticket.'));
+    }, 'image/png', 1.0);
+  });
+}
+
+async function compartirImagenTicket(btn) {
+  if (!ventaActualTicket) return;
+  const htmlOriginal = btn ? btn.innerHTML : '';
+
+  try {
+    let archivo = (ticketImagenCache.id === ventaActualTicket.id) ? ticketImagenCache.file : null;
+    let blob = (ticketImagenCache.id === ventaActualTicket.id) ? ticketImagenCache.blob : null;
+
+    // Si aún no estaba en caché, generarlo al momento
+    if (!archivo || !blob) {
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="ri-loader-4-line"></i> Generando...`;
+      }
+      blob = await generarBlobImagenTicket();
+      archivo = new File([blob], `Ticket_${ventaActualTicket.id}.png`, { type: 'image/png' });
+      ticketImagenCache = { id: ventaActualTicket.id, blob, file: archivo };
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = htmlOriginal;
+      }
+    }
+
+    // 1. En celulares (iOS Safari / Android Chrome): abre la hoja de compartir nativa con la imagen PNG adjunta para elegir WhatsApp
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          files: [archivo]
+        });
+        return;
+      } catch (shareErr) {
+        if (shareErr.name === 'AbortError') return;
+        console.warn('navigator.share con files no soportado en este navegador:', shareErr);
+      }
+    }
+
+    // 2. Respaldo para computadora de escritorio: descarga el PNG y abre WhatsApp Web para arrastrar/pegar la imagen
+    descargarBlobComoArchivo(blob, `Ticket_${ventaActualTicket.id}.png`);
+    mostrarToast('Imagen descargada. Abriendo WhatsApp para enviarla...', 'success');
+    setTimeout(() => {
+      window.open('https://web.whatsapp.com/', '_blank');
+    }, 600);
+
+  } catch (err) {
+    console.error('Error al compartir captura:', err);
+    mostrarToast('No se pudo compartir la captura. Usa Guardar PNG.', 'warning');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = htmlOriginal;
+    }
+  }
+}
+
+async function descargarImagenTicket() {
+  if (!ventaActualTicket) return;
+  try {
+    let blob = (ticketImagenCache.id === ventaActualTicket.id) ? ticketImagenCache.blob : null;
+    if (!blob) {
+      blob = await generarBlobImagenTicket();
+    }
+    descargarBlobComoArchivo(blob, `Ticket_${ventaActualTicket.id}.png`);
+    mostrarToast('Imagen del ticket guardada en descargas', 'success');
+  } catch (err) {
+    console.error(err);
+    mostrarToast('Error al guardar la imagen del ticket', 'error');
+  }
+}
+
+function descargarBlobComoArchivo(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function imprimirTicketTermico() {
+  window.print();
 }
 
 // =========================================================
